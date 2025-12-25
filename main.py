@@ -520,7 +520,7 @@ def wrapped(painting_name, id_dict={}, debug=False):
                     if layer["rotation"]["z"] != 0:
                         angle_rad = 2 * math.atan2(layer["rotation"]["z"], layer["rotation"]["w"])
                         w, h = canvas.size
-                        canvas = canvas.rotate(-math.degrees(angle_rad), expand=True, resample=Image.BICUBIC)
+                        canvas = canvas.rotate(-math.degrees(angle_rad), expand=True, resample=Image.BILINEAR)
                         new_w, new_h = canvas.size
                         px, py = layer["pivot"]["x"] * w, layer["pivot"]["y"] * h
                         dx, dy = px - w / 2, py - h / 2
@@ -549,7 +549,7 @@ def wrapped(painting_name, id_dict={}, debug=False):
         if layer["rotation"]["z"] != 0:
             angle_rad = 2 * math.atan2(layer["rotation"]["z"], layer["rotation"]["w"])
             w, h = canvas.size
-            canvas = canvas.rotate(-math.degrees(angle_rad), expand=True, resample=Image.BICUBIC)
+            canvas = canvas.rotate(-math.degrees(angle_rad), expand=True, resample=Image.BILINEAR)
             new_w, new_h = canvas.size
             px, py = layer["pivot"]["x"] * w, layer["pivot"]["y"] * h
             dx, dy = px - w / 2, py - h / 2
