@@ -1,6 +1,6 @@
 # Azur Lane Painting Reconstruction
 
-This script is a folk of [Senkin219's script](https://github.com/Senkin219/AzurLanePainting) with more flexible input directory, add fallback to get related asset files from base game AssetBundles folder if they are absent from the input folders. And some minor change.
+This script is a fork of [Senkin219's script](https://github.com/Senkin219/AzurLanePainting) with more flexible input directory, add fallback to get related asset files from base game AssetBundles folder if they are absent from the input folders. And some minor change.
 
 ## Usage
    - From this:
