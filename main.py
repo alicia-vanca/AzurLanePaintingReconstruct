@@ -905,7 +905,21 @@ if __name__ == "__main__":
     if args.file:
         # Single file mode: ensure asset_group_path is set correctly
         asset_group_path = input_root
-        wrapped(args.file, id_dict, debug, args.compress, args.webp)
+        # Define the potential paths for the requested file
+        local_path = Path(asset_group_path, "painting", args.file)
+        warehouse_path = (
+            Path(painting_warehouse_dir, args.file)
+            if painting_warehouse_exist
+            else None
+        )
+
+        # Check if the file exists in either the local folder or the warehouse
+        if local_path.is_file() or (warehouse_path and warehouse_path.is_file()):
+            wrapped(args.file, id_dict, debug, args.compress, args.webp)
+        else:
+            print(
+                f"\nError: '{args.file}' was not found in '{local_path.parent}' or the warehouse directory. Stopping.\n"
+            )
     else:
         # Batch mode: find all base directories that contain a "painting" subfolder
         base_dirs = set()
@@ -927,9 +941,9 @@ if __name__ == "__main__":
                 for file in files:
                     if not file.endswith("_tex"):
                         paintingfiles.append(file)
-                    elif painting_warehouse_exist:
+                    if painting_warehouse_exist:
                         # Extract base name (junzhu_5_n_rw_tex -> junzhu_5)
-                        # to find its asset files in warehouse folder
+                        # to find related assets in warehouse folder
                         base_name = get_base_name(file)
                         basenames.add(base_name)
 
