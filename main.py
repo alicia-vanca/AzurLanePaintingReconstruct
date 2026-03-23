@@ -96,7 +96,11 @@ face_fix = {
 
 def get_id_dict():
     painting2id = {}
-    if os.path.exists("ship_skin_template.json") and os.path.exists("ship_data_group.json") and os.path.exists("secretary_special_ship.json"):
+    if (
+        os.path.exists("ship_skin_template.json")
+        and os.path.exists("ship_data_group.json")
+        and os.path.exists("secretary_special_ship.json")
+    ):
         group2id = {}
         with open("ship_data_group.json", "r", encoding="utf8") as f1:
             group_map = json.load(f1)
@@ -143,7 +147,9 @@ def get_canvas(layer):
         if line.startswith("vt "):
             vertex = line.split(" ")[1:]
             vt_raw.append([float(n) for n in vertex])
-    assert len(v_raw) == len(vt_raw), "Unequal number of mesh vertices to texture vertices."
+    assert len(v_raw) == len(
+        vt_raw
+    ), "Unequal number of mesh vertices to texture vertices."
     v = [[-x, y] for x, y, z in v_raw]
     w = texture.width
     h = texture.height
@@ -152,11 +158,24 @@ def get_canvas(layer):
     canvas_width = 0
     canvas_height = 0
     for i in range(int(len(vt) / 4)):
-        patch = texture.crop((custom_round(vt[i * 4 + 1][0]), custom_round(vt[i * 4 + 1][1]), custom_round(vt[i * 4 + 3][0]), custom_round(vt[i * 4 + 3][1])))
+        patch = texture.crop(
+            (
+                custom_round(vt[i * 4 + 1][0]),
+                custom_round(vt[i * 4 + 1][1]),
+                custom_round(vt[i * 4 + 3][0]),
+                custom_round(vt[i * 4 + 3][1]),
+            )
+        )
         canvas_width = max(canvas_width, v[i * 4][0] + patch.width)
         canvas_height = max(canvas_height, v[i * 4 + 2][1])
         patches.append(patch)
-    canvas = Image.new("RGBA", (custom_round(max(size["x"], canvas_width)), custom_round(max(size["y"], canvas_height))))
+    canvas = Image.new(
+        "RGBA",
+        (
+            custom_round(max(size["x"], canvas_width)),
+            custom_round(max(size["y"], canvas_height)),
+        ),
+    )
     for i, patch in enumerate(patches):
         canvas.alpha_composite(
             patch.convert("RGBA").transpose(Image.Transpose.FLIP_TOP_BOTTOM),
@@ -207,7 +226,9 @@ def get_dependencies():
     id, primary = get_primary(env.assets[0])
     dependencies = {}
     for m_Value in primary["m_Values"]:
-        m_FileName = re.sub(r"^.*?(/painting/.*)?$", r"\g<1>", m_Value["m_FileName"])[1:]
+        m_FileName = re.sub(r"^.*?(/painting/.*)?$", r"\g<1>", m_Value["m_FileName"])[
+            1:
+        ]
         # m_FileName = re.sub('^.*?(/painting(?:face)?/.*)?$', '\g<1>', m_Value['m_FileName'])[1:] # includes paintingface
         if m_FileName:
             # if m_FileName.endswith('_tex'):
@@ -259,22 +280,49 @@ def get_layers(asset, textures, layers={}, id=None, parent=None):
             anchorpos = tree["m_AnchoredPosition"]
             if parent is None:
                 entry["bound"] = entry["delta"]
-                entry["position"] = {"x": entry["delta"]["x"] * entry["pivot"]["x"], "y": entry["delta"]["y"] * entry["pivot"]["y"]}
+                entry["position"] = {
+                    "x": entry["delta"]["x"] * entry["pivot"]["x"],
+                    "y": entry["delta"]["y"] * entry["pivot"]["y"],
+                }
             else:
                 pl = layers[parent]
                 entry["bound"] = {
-                    "x": (pl["bound"]["x"] * (anchormax["x"] - anchormin["x"]) + entry["delta"]["x"]) * entry["scale"]["x"],
-                    "y": (pl["bound"]["y"] * (anchormax["y"] - anchormin["y"]) + entry["delta"]["y"]) * entry["scale"]["y"],
+                    "x": (
+                        pl["bound"]["x"] * (anchormax["x"] - anchormin["x"])
+                        + entry["delta"]["x"]
+                    )
+                    * entry["scale"]["x"],
+                    "y": (
+                        pl["bound"]["y"] * (anchormax["y"] - anchormin["y"])
+                        + entry["delta"]["y"]
+                    )
+                    * entry["scale"]["y"],
                 }  # bounding box width and height
                 entry["position"] = {
-                    "x": anchorpos["x"] + pl["bound"]["x"] * (anchormax["x"] - anchormin["x"]) * entry["pivot"]["x"] + pl["bound"]["x"] * anchormin["x"] - pl["bound"]["x"] * pl["pivot"]["x"],
-                    "y": anchorpos["y"] + pl["bound"]["y"] * (anchormax["y"] - anchormin["y"]) * entry["pivot"]["y"] + pl["bound"]["y"] * anchormin["y"] - pl["bound"]["y"] * pl["pivot"]["y"],
+                    "x": anchorpos["x"]
+                    + pl["bound"]["x"]
+                    * (anchormax["x"] - anchormin["x"])
+                    * entry["pivot"]["x"]
+                    + pl["bound"]["x"] * anchormin["x"]
+                    - pl["bound"]["x"] * pl["pivot"]["x"],
+                    "y": anchorpos["y"]
+                    + pl["bound"]["y"]
+                    * (anchormax["y"] - anchormin["y"])
+                    * entry["pivot"]["y"]
+                    + pl["bound"]["y"] * anchormin["y"]
+                    - pl["bound"]["y"] * pl["pivot"]["y"],
                 }  # pivot in relation to parent pivot
-            if (gameobject["m_Name"] == "face" and "parent" not in layers[parent]) or (gameobject["m_Name"] == "face_sub" and layers[parent]["name"] == "face"):
+            if (gameobject["m_Name"] == "face" and "parent" not in layers[parent]) or (
+                gameobject["m_Name"] == "face_sub" and layers[parent]["name"] == "face"
+            ):
                 entry["size"] = entry["delta"]
             children = tree["m_Children"]
         # bisimaiz
-        if component.type.name == "Transform" and children == None and "m_Children" in tree:
+        if (
+            component.type.name == "Transform"
+            and children == None
+            and "m_Children" in tree
+        ):
             entry["scale"] = tree["m_LocalScale"]
             if parent == None or entry["name"] == "layers":
                 entry["scale"] = {"x": 1, "y": 1, "z": 1}
@@ -289,7 +337,11 @@ def get_layers(asset, textures, layers={}, id=None, parent=None):
             sprite_id = tree["m_Sprite"]["m_PathID"]
             entry["size"] = tree["mRawSpriteSize"]
         # xiefeierde_3
-        elif "m_Sprite" in tree and entry["name"] != "face" and entry["name"] != "face_sub":
+        elif (
+            "m_Sprite" in tree
+            and entry["name"] != "face"
+            and entry["name"] != "face_sub"
+        ):
             entry["isImage"] = True
             mesh_id = 0
             sprite_id = tree["m_Sprite"]["m_PathID"]
@@ -329,7 +381,14 @@ def wrapped(painting_name, id_dict={}, debug=False):
     if "_tex" in painting_name:
         print('Please enter the filename without the "_tex" suffix.')
         return
-    if painting_name in ["mat", "mat_v1f1", "jinluhao_hx", "jinluhao_n_hx", "dafeng_6_shophx", "haifeng_3_n_rw"]:
+    if painting_name in [
+        "mat",
+        "mat_v1f1",
+        "jinluhao_hx",
+        "jinluhao_n_hx",
+        "dafeng_6_shophx",
+        "haifeng_3_n_rw",
+    ]:
         return
     print("\nstart", painting_name)
 
@@ -338,9 +397,23 @@ def wrapped(painting_name, id_dict={}, debug=False):
     depfiles_ex = [
         "painting/{}".format(f.name)
         for f in Path(root, "painting").iterdir()
-        if (f.is_file() and painting_name.replace("_hx", "").replace("_npc", "__nnpc").replace("_n", "").replace("_ex", "").replace("_idolns", "_idol").replace("_wjz", "") in f.name)
+        if (
+            f.is_file()
+            and painting_name.replace("_hx", "")
+            .replace("_npc", "__nnpc")
+            .replace("_n", "")
+            .replace("_ex", "")
+            .replace("_idolns", "_idol")
+            .replace("_wjz", "")
+            in f.name
+        )
     ]
-    textures = UnityPy.load(*["{}/{}".format(root, fn) for fn in list(set(depfiles or []) | set(depfiles_ex))])
+    textures = UnityPy.load(
+        *[
+            "{}/{}".format(root, fn)
+            for fn in list(set(depfiles or []) | set(depfiles_ex))
+        ]
+    )
 
     env = UnityPy.load(str(Path(root, "painting", painting_name)))
     layers = {}
@@ -383,7 +456,11 @@ def wrapped(painting_name, id_dict={}, debug=False):
                 name = layer["name"]
                 for i in layers:
                     layer = layers[i]
-                    if "box" in layer and "parent" in layer and (layer["name"] == name or layer["name"] == "paint"):
+                    if (
+                        "box" in layer
+                        and "parent" in layer
+                        and (layer["name"] == name or layer["name"] == "paint")
+                    ):
                         fix[0] = custom_round(layer["box"][0]) - layer["box"][0]
                         fix[1] = custom_round(layer["box"][1]) - layer["box"][1]
                         break
@@ -396,8 +473,12 @@ def wrapped(painting_name, id_dict={}, debug=False):
                 layer["box"][1] += fix[1] + face_fix.get(painting_name, [0, 0, 0, 0])[1]
                 layer["box"][2] += fix[0] + face_fix.get(painting_name, [0, 0, 0, 0])[2]
                 layer["box"][3] += fix[1] + face_fix.get(painting_name, [0, 0, 0, 0])[3]
-            layer["box"][2] = custom_round(layer["box"][0]) + layer["box"][2] - layer["box"][0]
-            layer["box"][3] = custom_round(layer["box"][1]) + layer["box"][3] - layer["box"][1]
+            layer["box"][2] = (
+                custom_round(layer["box"][0]) + layer["box"][2] - layer["box"][0]
+            )
+            layer["box"][3] = (
+                custom_round(layer["box"][1]) + layer["box"][3] - layer["box"][1]
+            )
             layer["box"][0] = custom_round(layer["box"][0])
             layer["box"][1] = custom_round(layer["box"][1])
     boxes = [layer["box"] for layer in layers.values() if "size" in layer]
@@ -435,8 +516,16 @@ def wrapped(painting_name, id_dict={}, debug=False):
             canvas = get_canvas(layer)
             canvas = canvas.resize(
                 (
-                    custom_round(canvas.width * ((layer["box"][2] - layer["box"][0]) or layer["size"]["x"]) / layer["size"]["x"]),
-                    custom_round(canvas.height * ((layer["box"][3] - layer["box"][1]) or layer["size"]["y"]) / layer["size"]["y"]),
+                    custom_round(
+                        canvas.width
+                        * ((layer["box"][2] - layer["box"][0]) or layer["size"]["x"])
+                        / layer["size"]["x"]
+                    ),
+                    custom_round(
+                        canvas.height
+                        * ((layer["box"][3] - layer["box"][1]) or layer["size"]["y"])
+                        / layer["size"]["y"]
+                    ),
                 ),
                 Image.BILINEAR,
             ).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
@@ -463,17 +552,72 @@ def wrapped(painting_name, id_dict={}, debug=False):
 
     os.makedirs("output2", exist_ok=True)
     face0_flag = False
-    faces = UnityPy.load(str(Path(root, "paintingface", painting_name.replace("_npc", "__nnpc").replace("_n", "").replace("_ex", ""))))
+    faces = UnityPy.load(
+        str(
+            Path(
+                root,
+                "paintingface",
+                painting_name.replace("_npc", "__nnpc")
+                .replace("_n", "")
+                .replace("_ex", ""),
+            )
+        )
+    )
     if len(faces.assets) == 0 and "_hx" in painting_name:
-        faces = UnityPy.load(str(Path(root, "paintingface", painting_name.replace("_hx", "").replace("_npc", "__nnpc").replace("_n", "").replace("_ex", ""))))
+        faces = UnityPy.load(
+            str(
+                Path(
+                    root,
+                    "paintingface",
+                    painting_name.replace("_hx", "")
+                    .replace("_npc", "__nnpc")
+                    .replace("_n", "")
+                    .replace("_ex", ""),
+                )
+            )
+        )
     if len(faces.assets) == 0 and "_wjz" in painting_name:
-        faces = UnityPy.load(str(Path(root, "paintingface", painting_name.replace("_hx", "").replace("_npc", "__nnpc").replace("_n", "").replace("_ex", "").replace("_wjz", ""))))
+        faces = UnityPy.load(
+            str(
+                Path(
+                    root,
+                    "paintingface",
+                    painting_name.replace("_hx", "")
+                    .replace("_npc", "__nnpc")
+                    .replace("_n", "")
+                    .replace("_ex", "")
+                    .replace("_wjz", ""),
+                )
+            )
+        )
     if len(faces.assets) == 0 and "_idolns" in painting_name:
-        faces = UnityPy.load(str(Path(root, "paintingface", painting_name.replace("_hx", "").replace("_npc", "__nnpc").replace("_n", "").replace("_ex", "").replace("_idolns", "_idol"))))
+        faces = UnityPy.load(
+            str(
+                Path(
+                    root,
+                    "paintingface",
+                    painting_name.replace("_hx", "")
+                    .replace("_npc", "__nnpc")
+                    .replace("_n", "")
+                    .replace("_ex", "")
+                    .replace("_idolns", "_idol"),
+                )
+            )
+        )
     filename = painting_name
     if id_dict:
         filename = (
-            id_dict.get(painting_name.replace("_wjz", "").replace("_hx", "").replace("_ex", "").replace("_idolns", "_idol").replace("_npc", "__nnpc").replace("_n", ""), "999999") + "_" + painting_name
+            id_dict.get(
+                painting_name.replace("_wjz", "")
+                .replace("_hx", "")
+                .replace("_ex", "")
+                .replace("_idolns", "_idol")
+                .replace("_npc", "__nnpc")
+                .replace("_n", ""),
+                "999999",
+            )
+            + "_"
+            + painting_name
         )
     if len(faces.assets) != 0:
         face_sub = {}
@@ -498,40 +642,83 @@ def wrapped(painting_name, id_dict={}, debug=False):
                         # bolisi
                         canvas = canvas.resize(
                             (
-                                custom_round((layer["box"][2] - layer["box"][0]) or canvas.width),
-                                custom_round((layer["box"][3] - layer["box"][1]) or canvas.height),
+                                custom_round(
+                                    (layer["box"][2] - layer["box"][0]) or canvas.width
+                                ),
+                                custom_round(
+                                    (layer["box"][3] - layer["box"][1]) or canvas.height
+                                ),
                             ),
                             Image.BILINEAR,
                         ).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
                     # xiaoyue_2
                     elif canvas == "face_sub":
                         if face_sub.get(face.m_Name + "_sub"):
-                            canvas = face_sub.get(face.m_Name + "_sub").image.convert("RGBA")
+                            canvas = face_sub.get(face.m_Name + "_sub").image.convert(
+                                "RGBA"
+                            )
                             canvas = canvas.resize(
                                 (
-                                    custom_round((layer["box"][2] - layer["box"][0]) or canvas.width),
-                                    custom_round((layer["box"][3] - layer["box"][1]) or canvas.height),
+                                    custom_round(
+                                        (layer["box"][2] - layer["box"][0])
+                                        or canvas.width
+                                    ),
+                                    custom_round(
+                                        (layer["box"][3] - layer["box"][1])
+                                        or canvas.height
+                                    ),
                                 ),
-                            Image.BILINEAR,
+                                Image.BILINEAR,
                             ).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
                         else:
                             continue
                     # changdao_g:hx
                     if layer["rotation"]["z"] != 0:
-                        angle_rad = 2 * math.atan2(layer["rotation"]["z"], layer["rotation"]["w"])
+                        angle_rad = 2 * math.atan2(
+                            layer["rotation"]["z"], layer["rotation"]["w"]
+                        )
                         w, h = canvas.size
-                        canvas = canvas.rotate(-math.degrees(angle_rad), expand=True, resample=Image.BILINEAR)
+                        canvas = canvas.rotate(
+                            -math.degrees(angle_rad),
+                            expand=True,
+                            resample=Image.BILINEAR,
+                        )
                         new_w, new_h = canvas.size
                         px, py = layer["pivot"]["x"] * w, layer["pivot"]["y"] * h
                         dx, dy = px - w / 2, py - h / 2
-                        layer["box"][0] += px - (new_w / 2 + dx * math.cos(angle_rad) - dy * math.sin(angle_rad))
-                        layer["box"][1] += py - (new_h / 2 + dx * math.sin(angle_rad) + dy * math.cos(angle_rad))
+                        layer["box"][0] += px - (
+                            new_w / 2
+                            + dx * math.cos(angle_rad)
+                            - dy * math.sin(angle_rad)
+                        )
+                        layer["box"][1] += py - (
+                            new_h / 2
+                            + dx * math.sin(angle_rad)
+                            + dy * math.cos(angle_rad)
+                        )
                     # qiye_4
-                    if copy.width < canvas.width + custom_round(layer["box"][0]) or copy.height < canvas.height + custom_round(layer["box"][1]):
-                        new_copy = Image.new("RGBA", (max(copy.width, canvas.width + custom_round(layer["box"][0])), max(copy.height, canvas.height + custom_round(layer["box"][1]))))
+                    if copy.width < canvas.width + custom_round(
+                        layer["box"][0]
+                    ) or copy.height < canvas.height + custom_round(layer["box"][1]):
+                        new_copy = Image.new(
+                            "RGBA",
+                            (
+                                max(
+                                    copy.width,
+                                    canvas.width + custom_round(layer["box"][0]),
+                                ),
+                                max(
+                                    copy.height,
+                                    canvas.height + custom_round(layer["box"][1]),
+                                ),
+                            ),
+                        )
                         new_copy.alpha_composite(copy, (0, 0))
                         copy = new_copy
-                    copy.alpha_composite(canvas, (custom_round(layer["box"][0]), custom_round(layer["box"][1])))
+                    copy.alpha_composite(
+                        canvas,
+                        (custom_round(layer["box"][0]), custom_round(layer["box"][1])),
+                    )
                 copy = copy.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
                 if False:
                     bbox = copy.getbbox()
@@ -549,17 +736,33 @@ def wrapped(painting_name, id_dict={}, debug=False):
         if layer["rotation"]["z"] != 0:
             angle_rad = 2 * math.atan2(layer["rotation"]["z"], layer["rotation"]["w"])
             w, h = canvas.size
-            canvas = canvas.rotate(-math.degrees(angle_rad), expand=True, resample=Image.BILINEAR)
+            canvas = canvas.rotate(
+                -math.degrees(angle_rad), expand=True, resample=Image.BILINEAR
+            )
             new_w, new_h = canvas.size
             px, py = layer["pivot"]["x"] * w, layer["pivot"]["y"] * h
             dx, dy = px - w / 2, py - h / 2
-            layer["box"][0] += px - (new_w / 2 + dx * math.cos(angle_rad) - dy * math.sin(angle_rad))
-            layer["box"][1] += py - (new_h / 2 + dx * math.sin(angle_rad) + dy * math.cos(angle_rad))
-        if master.width < canvas.width + custom_round(layer["box"][0]) or master.height < canvas.height + custom_round(layer["box"][1]):
-            new_master = Image.new("RGBA", (max(master.width, canvas.width + custom_round(layer["box"][0])), max(master.height, canvas.height + custom_round(layer["box"][1]))))
+            layer["box"][0] += px - (
+                new_w / 2 + dx * math.cos(angle_rad) - dy * math.sin(angle_rad)
+            )
+            layer["box"][1] += py - (
+                new_h / 2 + dx * math.sin(angle_rad) + dy * math.cos(angle_rad)
+            )
+        if master.width < canvas.width + custom_round(
+            layer["box"][0]
+        ) or master.height < canvas.height + custom_round(layer["box"][1]):
+            new_master = Image.new(
+                "RGBA",
+                (
+                    max(master.width, canvas.width + custom_round(layer["box"][0])),
+                    max(master.height, canvas.height + custom_round(layer["box"][1])),
+                ),
+            )
             new_master.alpha_composite(master, (0, 0))
             master = new_master
-        master.alpha_composite(canvas, (custom_round(layer["box"][0]), custom_round(layer["box"][1])))
+        master.alpha_composite(
+            canvas, (custom_round(layer["box"][0]), custom_round(layer["box"][1]))
+        )
     master = master.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
     if face0_flag:
         master.save("output2/{}.png".format(filename))
@@ -569,7 +772,9 @@ def wrapped(painting_name, id_dict={}, debug=False):
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("file", nargs="?", help="the name of the painting assetbundle file")
+    parser.add_argument(
+        "file", nargs="?", help="the name of the painting assetbundle file"
+    )
     args = parser.parse_args()
 
     id_dict = get_id_dict()
@@ -588,7 +793,10 @@ if __name__ == "__main__":
         if mp:
             import multiprocessing
             from functools import partial
-            multiprocessing.Pool().map(partial(wrapped, id_dict=id_dict, debug=debug), paintingfiles)
+
+            multiprocessing.Pool().map(
+                partial(wrapped, id_dict=id_dict, debug=debug), paintingfiles
+            )
         else:
             for file in paintingfiles:
                 wrapped(file, id_dict, debug)
