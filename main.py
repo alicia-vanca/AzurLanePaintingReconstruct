@@ -7,8 +7,17 @@ import math
 import json
 from argparse import ArgumentParser
 
-root = "AssetBundles"
+input_root = "AssetBundles"
+output_root = "Output"
+
+# (optional) Path of the base game AssetBundles - to get missing painting & paintingface files
+# You can copy the game folder or download it with https://github.com/nobbyfix/AzurLane-AssetDownloader
+# e.g: r'C:\....\....\MuMuSharedFolder\AzurLane_backup_data\AssetBundles'
+asset_warehouse_path = r""
+
+asset_group_path = None
 saveMesh = False
+
 # face offset, I think most of these also exist in the game, only test on CN assets (iOS: $paintinghash$594$3797e24395a3763b)
 face_fix = {
     "longxiang_3": [-1, 0, -1, 0],
@@ -102,27 +111,60 @@ def get_id_dict():
         and os.path.exists("secretary_special_ship.json")
     ):
         group2id = {}
+        # Map group types to group IDs
         with open("ship_data_group.json", "r", encoding="utf8") as f1:
             group_map = json.load(f1)
         for key in group_map:
             group_type = group_map[key]["group_type"]
             group2id[group_type] = key
+
+        # Load skin template
         with open("ship_skin_template.json", "r", encoding="utf8") as f2:
             skin_map = json.load(f2)
+
+        # Helper to format the prefix as "groupid_shipname"
+        def get_formatted_prefix(skin_id_str, group_id):
+            # Transformation rule: change the last digit of the skin ID to 0
+            # to find the "base" ship entry (e.g., 990003 -> 990000)
+            base_key = skin_id_str[:-1] + "0"
+            if base_key in skin_map:
+                ship_name = skin_map[base_key].get("name", "")
+                if ship_name:
+                    # Remove illegal characters and replace spaces with underscores
+                    clean_name = re.sub(r'[\\/*?:"<>|]', "", ship_name).replace(
+                        " ", "_"
+                    )
+                    return f"{group_id}_{clean_name}"
+            return str(group_id)
+
+        # Process skin_map (Main pass)
         for key in dict(reversed(list(skin_map.items()))):
             painting_name = skin_map[key]["painting"].lower()
-            if group2id.get(skin_map[key]["ship_group"]):
-                painting2id[painting_name] = group2id[skin_map[key]["ship_group"]]
+            ship_group = skin_map[key]["ship_group"]
+            gid = group2id.get(ship_group)
+            if gid:
+                painting2id[painting_name] = get_formatted_prefix(key, gid)
+
+        # Process skin_map (Fallback pass)
         for key in dict(reversed(list(skin_map.items()))):
             painting_name = skin_map[key]["painting"].lower()
-            if painting2id.get(painting_name) == None:
-                painting2id[painting_name] = str(skin_map[key]["ship_group"])
+            if painting2id.get(painting_name) is None:
+                gid = str(skin_map[key]["ship_group"])
+                painting2id[painting_name] = get_formatted_prefix(key, gid)
+
+        # Process secretary_special_ship.json (Child ships/Special cases)
         with open("secretary_special_ship.json", "r", encoding="utf8") as f3:
             child_map = json.load(f3)
         for key in child_map:
             if key.isnumeric():
-                child_painting = child_map[key].get("painting")
-                painting2id[child_painting] = str(child_map[key]["group"])
+                child_data = child_map[key]
+                child_painting = child_data.get("painting")
+                if child_painting:
+                    # Use the 'group' field as defined in secretary_special_ship
+                    gid = str(child_data.get("group", "999999"))
+                    # Map the painting (lowercase) to the base ship name prefix
+                    painting2id[child_painting.lower()] = get_formatted_prefix(key, gid)
+
     return painting2id
 
 
@@ -133,6 +175,27 @@ def custom_round(n):
         return floor_value + 1
     else:
         return round(n)
+
+
+def save_image(img, path_str, compress=False, use_webp=False):
+    # Saves images as either optimized PNG or WebP.
+    if use_webp:
+        # quality=80-90 provides a great balance of size and visual fidelity
+        img.save(path_str, format="WEBP", quality=85, lossless=False)
+    elif compress:
+        try:
+            if img.mode != "RGBA":
+                img = img.convert("RGBA")
+            # Quantize to 256 colors for PNG compression
+            q_img = img.quantize(colors=256, method=Image.Quantize.MAXCOVERAGE)
+            q_img.save(path_str, format="PNG", optimize=True, compress_level=9)
+        except Exception as e:
+            # Fallback to standard optimization if quantization fails
+            img.save(path_str, format="PNG", optimize=True, compress_level=9)
+    else:
+        img.save(path_str, format="PNG")
+
+    print(f"Saved: {os.path.basename(path_str)}")
 
 
 def get_canvas(layer):
@@ -194,9 +257,12 @@ def get_canvas(layer):
             new_bbox = (0, 0, size["x"], size["y"])
         canvas = canvas.crop(new_bbox)
     canvas = canvas.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+
     if saveMesh:
-        os.makedirs(Path("output2", "mesh"), exist_ok=True)
-        canvas.save(Path("output2", "mesh", layer["name"] + ".png"))
+        rel_path = os.path.relpath(asset_group_path, input_root)
+        out_dir = Path(output_root, rel_path)
+        os.makedirs(out_dir / "mesh", exist_ok=True)
+        canvas.save(out_dir / "mesh" / (layer["name"] + ".png"))
     return canvas
 
 
@@ -222,7 +288,7 @@ def get_primary(asset):
 
 def get_dependencies():
     # Returns dependency map linking asset files to their texture files.
-    env = UnityPy.load(str(Path(root, "dependencies")))
+    env = UnityPy.load(str(Path(input_root, "dependencies")))
     id, primary = get_primary(env.assets[0])
     dependencies = {}
     for m_Value in primary["m_Values"]:
@@ -346,6 +412,7 @@ def get_layers(asset, textures, layers={}, id=None, parent=None):
             mesh_id = 0
             sprite_id = tree["m_Sprite"]["m_PathID"]
             entry["size"] = entry["delta"]
+
     if mesh_id is not None:
         texas = {}
         for i in range(len(textures.assets)):
@@ -364,6 +431,7 @@ def get_layers(asset, textures, layers={}, id=None, parent=None):
             # do not report missing touming_tex
             if sprite_id not in [-1941817362335269276, -627025325541918145, 0]:
                 print(entry["name"], "missing texture file")
+
     if parent is not None:
         entry["parent"] = parent
 
@@ -377,45 +445,63 @@ def get_layers(asset, textures, layers={}, id=None, parent=None):
             get_layers(asset, textures, layers, child_id, id)
 
 
-def wrapped(painting_name, id_dict={}, debug=False):
-    if "_tex" in painting_name:
-        print('Please enter the filename without the "_tex" suffix.')
-        return
-    if painting_name in [
-        "mat",
-        "mat_v1f1",
-        "jinluhao_hx",
-        "jinluhao_n_hx",
-        "dafeng_6_shophx",
-        "haifeng_3_n_rw",
-    ]:
-        return
-    print("\nstart", painting_name)
+def get_base_name(filename):
+    """Strip variant suffixes exactly as in wrapped() to get the base name."""
+    # Order alternatives from longest to shortest to handle overlaps like _bj1 vs _bj
+    pattern = r"(_tex|_wjz|_bj1|_bj2|_bj|_hx|_ex|_rw|_n)+"
+    return re.sub(pattern, "", filename).replace("_idolns", "_idol")
 
+
+def some_heavy_lifting_tasks(painting_name):
     depmap = get_dependencies()
     depfiles = depmap.get("painting/{}".format(painting_name))
-    depfiles_ex = [
-        "painting/{}".format(f.name)
-        for f in Path(root, "painting").iterdir()
-        if (
-            f.is_file()
-            and painting_name.replace("_hx", "")
-            .replace("_npc", "__nnpc")
-            .replace("_n", "")
-            .replace("_ex", "")
-            .replace("_idolns", "_idol")
-            .replace("_wjz", "")
-            in f.name
-        )
-    ]
-    textures = UnityPy.load(
-        *[
-            "{}/{}".format(root, fn)
-            for fn in list(set(depfiles or []) | set(depfiles_ex))
-        ]
-    )
 
-    env = UnityPy.load(str(Path(root, "painting", painting_name)))
+    # Collect local dependency files
+    depfiles_ex_local = [
+        "painting/{}".format(f.name)
+        for f in Path(asset_group_path, "painting").iterdir()
+        if (f.is_file() and get_base_name(painting_name) in f.name)
+    ]
+    # Collect asset warehouse dependency files
+    depfiles_ex_warehouse = []
+    if painting_warehouse_exist:
+        depfiles_ex_warehouse = [
+            "painting/{}".format(f.name)
+            for f in painting_warehouse_dir.iterdir()
+            if (f.is_file() and get_base_name(painting_name) in f.name)
+        ]
+
+    # Combine and deduplicate
+    depfiles_ex = list(set(depfiles_ex_local + depfiles_ex_warehouse))
+    # Combine and deduplicate dependency filenames
+    all_dep_filenames = list(set(depfiles or []) | set(depfiles_ex))
+
+    # Build list of actual existing file paths
+    texture_paths = []
+    for fn in all_dep_filenames:
+        local_path = Path(asset_group_path, fn)
+        if local_path.exists():
+            texture_paths.append(str(local_path))
+        else:
+            source_path = Path(
+                asset_warehouse_path, fn
+            )  # fallback to original game assets
+            if source_path.exists():
+                texture_paths.append(str(source_path))
+
+    # Load textures
+    if texture_paths:
+        textures = UnityPy.load(*texture_paths)
+    else:
+        textures = None
+
+    local_p = Path(asset_group_path, "painting", painting_name)
+    source_p = Path(asset_warehouse_path, "painting", painting_name)
+    if local_p.exists():
+        env = UnityPy.load(str(local_p))
+    elif source_p.exists():
+        env = UnityPy.load(str(source_p))
+
     layers = {}
     get_layers(env.assets[0], textures, layers)
 
@@ -481,6 +567,7 @@ def wrapped(painting_name, id_dict={}, debug=False):
             )
             layer["box"][0] = custom_round(layer["box"][0])
             layer["box"][1] = custom_round(layer["box"][1])
+
     boxes = [layer["box"] for layer in layers.values() if "size" in layer]
     if boxes:
         x0, y0 = min(box[0] for box in boxes), min(box[1] for box in boxes)
@@ -533,8 +620,8 @@ def wrapped(painting_name, id_dict={}, debug=False):
         elif "texture" in layer:
             canvas = layer["texture"].image.convert("RGBA")
             if saveMesh:
-                os.makedirs(Path("output2", "mesh"), exist_ok=True)
-                canvas.save(Path("output2", "mesh", layer["name"] + ".png"))
+                os.makedirs(out_dir / "mesh", exist_ok=True)
+                canvas.save(out_dir / "mesh" / (layer["name"] + ".png"))
             canvas = canvas.resize(
                 (
                     custom_round((layer["box"][2] - layer["box"][0]) or canvas.width),
@@ -549,77 +636,63 @@ def wrapped(painting_name, id_dict={}, debug=False):
         elif layer["name"] == "face_sub":
             canvas = "face_sub"
             canvases.append([canvas, layer])
+    return master, canvases
 
-    os.makedirs("output2", exist_ok=True)
-    face0_flag = False
-    faces = UnityPy.load(
-        str(
-            Path(
-                root,
-                "paintingface",
-                painting_name.replace("_npc", "__nnpc")
-                .replace("_n", "")
-                .replace("_ex", ""),
-            )
-        )
-    )
-    if len(faces.assets) == 0 and "_hx" in painting_name:
-        faces = UnityPy.load(
-            str(
-                Path(
-                    root,
-                    "paintingface",
-                    painting_name.replace("_hx", "")
-                    .replace("_npc", "__nnpc")
-                    .replace("_n", "")
-                    .replace("_ex", ""),
-                )
-            )
-        )
-    if len(faces.assets) == 0 and "_wjz" in painting_name:
-        faces = UnityPy.load(
-            str(
-                Path(
-                    root,
-                    "paintingface",
-                    painting_name.replace("_hx", "")
-                    .replace("_npc", "__nnpc")
-                    .replace("_n", "")
-                    .replace("_ex", "")
-                    .replace("_wjz", ""),
-                )
-            )
-        )
-    if len(faces.assets) == 0 and "_idolns" in painting_name:
-        faces = UnityPy.load(
-            str(
-                Path(
-                    root,
-                    "paintingface",
-                    painting_name.replace("_hx", "")
-                    .replace("_npc", "__nnpc")
-                    .replace("_n", "")
-                    .replace("_ex", "")
-                    .replace("_idolns", "_idol"),
-                )
-            )
-        )
+
+def wrapped(painting_name, id_dict={}, debug=False, compress=False, use_webp=False):
+    if "_tex" in painting_name:
+        print('Please enter the filename without the "_tex" suffix.')
+        return
+    if painting_name in [
+        "mat",
+        "mat_v1f1",
+        "jinluhao_hx",
+        "jinluhao_n_hx",
+        "dafeng_6_shophx",
+        "haifeng_3_n_rw",
+    ]:
+        return
+
+    # --- Setup Dynamic Output Directory ---
+    # input: AssetBundles\x\y\z\(painting & paintingface)
+    # output: output\x\y\z\(images)
+    rel_path = os.path.relpath(asset_group_path, input_root)
+    out_dir = Path("output", rel_path)
+    ext = ".webp" if use_webp else ".png"
+
+    # Use to check if output file already exist
+    ext = ".webp" if use_webp else ".png"
+
+    base_name = get_base_name(painting_name)
     filename = painting_name
     if id_dict:
-        filename = (
-            id_dict.get(
-                painting_name.replace("_wjz", "")
-                .replace("_hx", "")
-                .replace("_ex", "")
-                .replace("_idolns", "_idol")
-                .replace("_npc", "__nnpc")
-                .replace("_n", ""),
-                "999999",
-            )
-            + "_"
-            + painting_name
-        )
-    if len(faces.assets) != 0:
+        filename = id_dict.get(base_name, "999999") + "_" + painting_name
+
+    print("\nStart", painting_name)
+    os.makedirs(out_dir, exist_ok=True)
+
+    face0_flag = False
+    heavy_lifting_tasks_done = False
+
+    # A list of suffixes to try, including empty string
+    suffixes = ["", "_hx", "_wjz"]
+    base_dirs = [Path(asset_group_path, "paintingface")]
+    if paintingface_warehouse_exist:
+        base_dirs.append(paintingface_warehouse_dir)
+
+    faces = None
+    for base_dir in base_dirs:
+        for suffix in suffixes:
+            candidate = f"{get_base_name(painting_name)}{suffix}"
+            face_file = Path(base_dir, candidate)
+            if face_file.exists():
+                faces = UnityPy.load(str(face_file))
+                if len(faces.assets) != 0:
+                    break
+        if faces is not None and len(faces.assets) != 0:
+            break
+
+    if faces is not None and len(faces.assets) != 0:
         face_sub = {}
         for value in faces.assets[0].values():
             if value.type.name == "Texture2D":
@@ -631,8 +704,25 @@ def wrapped(painting_name, id_dict={}, debug=False):
                 face = value.read()
                 if face.m_Name == "0":
                     face0_flag = True
+
+                # Skip if this face is already processed
+                face_path = out_dir / f"{filename}.{face.m_Name}{ext}"
+                if face_path.is_file() and face_path.stat().st_size > 0:
+                    print(
+                        f"Skipping {filename}.{face.m_Name}, already exists in {out_dir}"
+                    )
+                    continue
+
                 if ("_sub" in face.m_Name) or (debug and face.m_Name != "1"):
                     continue
+
+                # Only do these tasks (once) if the file didn't got skip
+                if not heavy_lifting_tasks_done:
+                    master, canvases = some_heavy_lifting_tasks(painting_name)
+                    heavy_lifting_tasks_done = True
+                    if master is None:
+                        return
+
                 copy = master.copy()
                 for canvaslayer in canvases:
                     layer = canvaslayer[1]
@@ -719,15 +809,31 @@ def wrapped(painting_name, id_dict={}, debug=False):
                         canvas,
                         (custom_round(layer["box"][0]), custom_round(layer["box"][1])),
                     )
+
                 copy = copy.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-                if False:
-                    bbox = copy.getbbox()
-                    if bbox:
-                        copy = copy.crop(bbox)
-                copy.save("output2/{}.png".format(filename + "." + face.m_Name))
+
+                # --- SAVE COMPRESSED/ORIGINAL ---
+                save_image(copy, str(face_path), compress, use_webp)
     else:
-        print(painting_name, "no face found\n")
+        print(painting_name, " - no face found")
         face0_flag = True
+
+    if face0_flag:
+        output_filename = f"{filename}"
+    else:
+        output_filename = f"{filename}.0"
+    master_path = out_dir / f"{output_filename}{ext}"
+    if master_path.is_file() and master_path.stat().st_size > 0:
+        print(f"Skipping {output_filename}, already exists in {out_dir}")
+        return
+
+    # Only do these tasks (once) if the file didn't got skip
+    if not heavy_lifting_tasks_done:
+        master, canvases = some_heavy_lifting_tasks(painting_name)
+        heavy_lifting_tasks_done = True
+        if master is None:
+            return
+
     for canvaslayer in canvases:
         layer = canvaslayer[1]
         canvas = canvaslayer[0]
@@ -763,17 +869,24 @@ def wrapped(painting_name, id_dict={}, debug=False):
         master.alpha_composite(
             canvas, (custom_round(layer["box"][0]), custom_round(layer["box"][1]))
         )
+
     master = master.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-    if face0_flag:
-        master.save("output2/{}.png".format(filename))
-    else:
-        master.save("output2/{}.png".format(filename + ".0"))
+
+    # --- SAVE COMPRESSED/ORIGINAL ---
+    save_image(master, str(master_path), compress, use_webp)
 
 
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument(
         "file", nargs="?", help="the name of the painting assetbundle file"
+    )
+    # Added compress and webp flag
+    parser.add_argument(
+        "-c", "--compress", action="store_true", help="Compress PNG via quantization"
+    )
+    parser.add_argument(
+        "-w", "--webp", action="store_true", help="Output as WebP instead of PNG"
     )
     args = parser.parse_args()
 
@@ -782,21 +895,68 @@ if __name__ == "__main__":
     debug = False
     mp = False
 
+    # Check if the original game file folder exist
+    painting_warehouse_dir = Path(asset_warehouse_path, "painting")
+    painting_warehouse_exist = asset_warehouse_path and painting_warehouse_dir.exists()
+    paintingface_warehouse_dir = Path(asset_warehouse_path, "paintingface")
+    paintingface_warehouse_exist = (
+        asset_warehouse_path and paintingface_warehouse_dir.exists()
+    )
     if args.file:
-        wrapped(args.file, id_dict, debug)
+        # Single file mode: ensure asset_group_path is set correctly
+        asset_group_path = input_root
+        wrapped(args.file, id_dict, debug, args.compress, args.webp)
     else:
-        paintingfiles = []
-        for root2, dirs, files in os.walk(Path(root, "painting")):
-            for file in files:
-                if file[-4:] != "_tex":
-                    paintingfiles.append(file)
-        if mp:
-            import multiprocessing
-            from functools import partial
+        # Batch mode: find all base directories that contain a "painting" subfolder
+        base_dirs = set()
+        for dirpath, dirnames, _ in os.walk("AssetBundles"):
+            if "painting" in dirnames:
+                base_dirs.add(dirpath)
 
-            multiprocessing.Pool().map(
-                partial(wrapped, id_dict=id_dict, debug=debug), paintingfiles
-            )
-        else:
-            for file in paintingfiles:
-                wrapped(file, id_dict, debug)
+        for base in base_dirs:
+            print(f"\n--- Processing base: {base} ---")
+            # Set the global asset_group_path to this base directory
+            asset_group_path = base
+
+            # Gather all painting asset files (non-_tex) in this base's painting folder
+            paintingfiles = []
+            basenames = set()
+
+            # First pass: Get standard files and basenames from _tex files
+            for root2, dirs, files in os.walk(Path(asset_group_path, "painting")):
+                for file in files:
+                    if not file.endswith("_tex"):
+                        paintingfiles.append(file)
+                    elif painting_warehouse_exist:
+                        # Extract base name (junzhu_5_n_rw_tex -> junzhu_5)
+                        # to find its asset files in warehouse folder
+                        base_name = get_base_name(file)
+                        basenames.add(base_name)
+
+            # Second pass: add missing source painting files that match the same base name
+            if painting_warehouse_exist and basenames:
+                for source_file in painting_warehouse_dir.iterdir():
+                    if source_file.is_file() and not source_file.name.endswith("_tex"):
+                        base_name = get_base_name(source_file.name)
+                        if (
+                            base_name in basenames
+                            and source_file.name not in paintingfiles
+                        ):
+                            paintingfiles.append(source_file.name)
+            if mp:
+                import multiprocessing
+                from functools import partial
+
+                multiprocessing.Pool().map(
+                    partial(
+                        wrapped,
+                        id_dict=id_dict,
+                        debug=debug,
+                        compress=args.compress,
+                        use_webp=args.webp,
+                    ),
+                    paintingfiles,
+                )
+            else:
+                for file in paintingfiles:
+                    wrapped(file, id_dict, debug, args.compress, args.webp)
