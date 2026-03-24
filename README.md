@@ -68,13 +68,19 @@ Working Directory/
   python main.py changfeng_2
   ```
 
-- **Add -c (--compress) to lower PNG size:**
+- **Add -m to process all files with multithread:**
+  
+  ```bash
+  python main.py -m
+  ```
+
+- **Add -c to lower PNG size:**
   
   ```bash
   python main.py -c
   ```
 
-- **Add -w (--webp) to export as WEBP for further reduce the output size:**
+- **Add -w to export as WEBP for further reduce the output size:**
   
   ```bash
   python main.py -w
