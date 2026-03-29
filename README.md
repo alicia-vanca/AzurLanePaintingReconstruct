@@ -43,7 +43,7 @@ Working Directory/
     ├── painting/
     │   ├── adiliao_3             # 
     │   ├── adiliao_3_n           # Auto process related files
-    │   ├── adiliao_3_rw_tex      # to build reconstruct paintings
+    │   ├── adiliao_3_rw_tex      # to reconstruct paintings
     │   └── adiliao_3_rw_n_tex    # 
     └── paintingface/
         └── adiliao_3             # 
